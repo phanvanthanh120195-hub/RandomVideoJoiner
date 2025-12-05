@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         self.spin_duration = QSpinBox()
         self.spin_duration.setRange(0, 9999) # 0 means unlimited (join all)
         self.spin_duration.setValue(0)
-        self.spin_duration.setSuffix(" s")
+        self.spin_duration.setSuffix(" min")
         self.spin_duration.setToolTip("Set 0 to join all available videos")
         controls_layout.addWidget(QLabel("Target Duration:"))
         controls_layout.addWidget(self.spin_duration)
@@ -120,7 +120,7 @@ class MainWindow(QMainWindow):
         if not self.video_manager.unused_videos:
             self.video_manager.reset_cycle()
             
-        target_duration_sec = self.spin_duration.value()
+        target_duration_sec = self.spin_duration.value() * 60  # Convert minutes to seconds
         no_audio = self.chk_no_audio.isChecked()
         video_count = self.spin_video_count.value()
         
