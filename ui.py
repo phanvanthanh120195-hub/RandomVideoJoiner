@@ -50,10 +50,19 @@ class MainWindow(QMainWindow):
         self.spin_duration = QSpinBox()
         self.spin_duration.setRange(0, 9999) # 0 means unlimited (join all)
         self.spin_duration.setValue(0)
-        self.spin_duration.setSuffix(" min")
+        self.spin_duration.setSuffix(" s")
         self.spin_duration.setToolTip("Set 0 to join all available videos")
         controls_layout.addWidget(QLabel("Target Duration:"))
         controls_layout.addWidget(self.spin_duration)
+        
+        # Number of Videos to Export
+        self.spin_video_count = QSpinBox()
+        self.spin_video_count.setRange(1, 100)
+        self.spin_video_count.setValue(1)
+        self.spin_video_count.setSuffix(" video(s)")
+        self.spin_video_count.setToolTip("Number of videos to export")
+        controls_layout.addWidget(QLabel("Number of Videos:"))
+        controls_layout.addWidget(self.spin_video_count)
         
         layout.addLayout(controls_layout)
         
@@ -111,8 +120,9 @@ class MainWindow(QMainWindow):
         if not self.video_manager.unused_videos:
             self.video_manager.reset_cycle()
             
-        target_duration_min = self.spin_duration.value()
+        target_duration_sec = self.spin_duration.value()
         no_audio = self.chk_no_audio.isChecked()
+        video_count = self.spin_video_count.value()
         
         # Determine output folder
         base_out_folder = self.output_folder_path if self.output_folder_path else self.folder_path
@@ -128,15 +138,14 @@ class MainWindow(QMainWindow):
                 self.log(f"Error creating Output folder: {e}")
                 out_folder = base_out_folder # Fallback
         
-        timestamp = int(time.time())
-        output_file = os.path.join(out_folder, f"output_final_{timestamp}.mp4")
-        
         self.btn_join.setEnabled(False)
         self.btn_cancel.setEnabled(True)
-        self.progress_bar.setRange(0, 0) # Indeterminate
+        self.progress_bar.setRange(0, video_count)
+        self.progress_bar.setValue(0)
         
-        self.thread = VideoJoinerThread(self.video_manager, target_duration_min, no_audio, output_file)
+        self.thread = VideoJoinerThread(self.video_manager, target_duration_sec, no_audio, out_folder, video_count)
         self.thread.log_signal.connect(self.log)
+        self.thread.progress_signal.connect(self.progress_bar.setValue)
         self.thread.finished_signal.connect(self.on_finished)
         self.thread.start()
         
@@ -147,12 +156,10 @@ class MainWindow(QMainWindow):
             self.btn_cancel.setEnabled(False)
             
     def on_finished(self, success, message):
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(100 if success else 0)
         self.btn_join.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         if success:
-            QMessageBox.information(self, "Success", "Video joining completed successfully!")
+            QMessageBox.information(self, "Thành công", f"Đã xuất thành công {message} video(s)!")
             self.log(f"Cycle Status: {len(self.video_manager.unused_videos)} unused, {len(self.video_manager.used_videos)} used.")
         else:
             if "terminated" in message or "stopped" in message.lower():
