@@ -101,14 +101,20 @@ class VideoJoinerThread(QThread):
                 return False
 
             self.log_signal.emit(f"Prepared {len(selected_videos)} videos for joining.")
-            
             # Create temp file for ffmpeg list
-            fd, temp_list_file = tempfile.mkstemp(suffix=".txt", text=True)
+            # Use output_folder for temp file to avoid permission issues with FFmpeg on Windows
+            fd, temp_list_file = tempfile.mkstemp(suffix=".txt", prefix="ffmpeg_list_", dir=self.output_folder, text=True)
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 for video in selected_videos:
-                    escaped_path = video.replace("'", "'\\\\''")
-                    f.write(f"file '{escaped_path}'\\n")
+                    # FFmpeg concat requires forward slashes on Windows and proper escaping
+                    # Replace backslash with forward slash
+                    normalized_path = video.replace(os.sep, '/')
+                    # Escape single quotes
+                    escaped_path = normalized_path.replace("'", "'\\\\''") 
+                    f.write(f"file '{escaped_path}'\n")
             
+            # Use forward slashes for the list file path itself too, just in case
+            temp_list_file = temp_list_file.replace(os.sep, '/')
             return self.run_simple_concat(temp_list_file, output_file)
 
         except Exception as e:
