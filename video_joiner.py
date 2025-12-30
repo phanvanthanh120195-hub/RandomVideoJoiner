@@ -9,14 +9,13 @@ class VideoJoinerThread(QThread):
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
 
-    def __init__(self, video_manager, target_duration_sec, no_audio, output_folder, video_count, re_encode=True):
+    def __init__(self, video_manager, target_duration_sec, no_audio, output_folder, video_count):
         super().__init__()
         self.video_manager = video_manager
         self.target_duration_sec = target_duration_sec
         self.no_audio = no_audio
         self.output_folder = output_folder
         self.video_count = video_count
-        self.re_encode = re_encode
         self.is_running = True
 
     def run(self):
@@ -139,29 +138,10 @@ class VideoJoinerThread(QThread):
             '-i', temp_list_file,
         ]
         
-        if self.re_encode:
-            # Re-encode to ensure smooth playback (fixes lag with mixed-format videos)
-            # Try hardware acceleration first (NVIDIA GPU)
-            cmd.extend([
-                '-c:v', 'h264_nvenc',    # NVIDIA hardware encoder (fallback to libx264 if not available)
-                '-preset', 'p4',         # NVENC preset (p1=fastest, p7=slowest)
-                '-crf', '23',           # Quality (18-28, lower = better quality)
-                '-pix_fmt', 'yuv420p',  # Pixel format for compatibility
-                '-vsync', 'vfr',        # Variable framerate (preserves original timing)
-            ])
-            
-            if self.no_audio:
-                cmd.append('-an')
-            else:
-                cmd.extend([
-                    '-c:a', 'aac',      # AAC audio codec
-                    '-b:a', '128k',     # Audio bitrate
-                ])
-        else:
-            # Fast codec copy (only works well with same-format videos)
-            if self.no_audio:
-                cmd.append('-an')
-            cmd.extend(['-c', 'copy'])
+        # Fast codec copy (works well with same-format videos)
+        if self.no_audio:
+            cmd.append('-an')
+        cmd.extend(['-c', 'copy'])
         
         # Fix timestamp issues
         cmd.extend([
@@ -181,28 +161,8 @@ class VideoJoinerThread(QThread):
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         
-        # Try hardware acceleration first, fallback to software if fails
-        success = self._try_ffmpeg(cmd, startupinfo)
-        
-        if not success and self.re_encode and '-c:v' in cmd:
-            # If hardware encoding failed, try software encoding with ultrafast preset
-            self.log_signal.emit("Hardware encoding failed, falling back to software encoding...")
-            
-            # Replace hardware encoder with software encoder
-            cmd_fallback = cmd.copy()
-            try:
-                idx = cmd_fallback.index('-c:v')
-                if cmd_fallback[idx + 1] in ['h264_nvenc', 'h264_amf']:
-                    cmd_fallback[idx + 1] = 'libx264'
-                    # Replace NVENC preset with libx264 preset
-                    preset_idx = cmd_fallback.index('-preset')
-                    cmd_fallback[preset_idx + 1] = 'ultrafast'
-                    
-                    success = self._try_ffmpeg(cmd_fallback, startupinfo)
-            except (ValueError, IndexError):
-                pass
-        
-        return success
+        # Execute FFmpeg command
+        return self._try_ffmpeg(cmd, startupinfo)
     
     def _try_ffmpeg(self, cmd, startupinfo):
         """Try to execute FFmpeg command and return success status"""

@@ -46,19 +46,20 @@ class MainWindow(QMainWindow):
         self.chk_no_audio = QCheckBox("Xuất video không có âm thanh (Mute)")
         controls_layout.addWidget(self.chk_no_audio)
         
-        self.chk_re_encode = QCheckBox("Re-encode (Fix lag cho video khác nguồn)")
-        self.chk_re_encode.setChecked(True)  # Default enabled
-        self.chk_re_encode.setToolTip("Bật để fix lag khi nối video từ nhiều nguồn khác nhau. Tắt để nối nhanh hơn (chỉ dùng cho video cùng format).")
-        controls_layout.addWidget(self.chk_re_encode)
-        
         # Target Duration Input
         self.spin_duration = QSpinBox()
         self.spin_duration.setRange(0, 9999) # 0 means unlimited (join all)
         self.spin_duration.setValue(0)
         self.spin_duration.setSuffix(" min")
         self.spin_duration.setToolTip("Set 0 to join all available videos")
+        self.spin_duration.valueChanged.connect(self.update_duration_display)
         controls_layout.addWidget(QLabel("Target Duration:"))
         controls_layout.addWidget(self.spin_duration)
+        
+        # Duration display label
+        self.lbl_duration_display = QLabel("")
+        self.lbl_duration_display.setStyleSheet("color: #3b82f6; font-weight: bold;")
+        controls_layout.addWidget(self.lbl_duration_display)
         
         # Number of Videos to Export
         self.spin_video_count = QSpinBox()
@@ -106,10 +107,28 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Select Output Folder")
         if folder:
             self.output_folder_path = folder
-            self.output_label.setText(f"Output: {folder}")
+            self.output_label.setText(f"{folder}")
         else:
             self.output_folder_path = ""
-            self.output_label.setText("Output Folder: Same as Source")
+            self.output_label.setText("Same as Source")
+    
+    def update_duration_display(self):
+        """Update the duration display label to show hours and minutes"""
+        minutes = self.spin_duration.value()
+        
+        if minutes == 0:
+            self.lbl_duration_display.setText("")
+        else:
+            hours = minutes // 60
+            remaining_mins = minutes % 60
+            
+            if hours > 0:
+                if remaining_mins > 0:
+                    self.lbl_duration_display.setText(f"({hours}h{remaining_mins}p)")
+                else:
+                    self.lbl_duration_display.setText(f"({hours}h)")
+            else:
+                self.lbl_duration_display.setText(f"({remaining_mins}p)")
 
     def log(self, message):
         self.log_text.append(message)
@@ -127,7 +146,6 @@ class MainWindow(QMainWindow):
             
         target_duration_sec = self.spin_duration.value() * 60  # Convert minutes to seconds
         no_audio = self.chk_no_audio.isChecked()
-        re_encode = self.chk_re_encode.isChecked()
         video_count = self.spin_video_count.value()
         
         # Determine output folder
@@ -149,7 +167,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setRange(0, video_count)
         self.progress_bar.setValue(0)
         
-        self.thread = VideoJoinerThread(self.video_manager, target_duration_sec, no_audio, out_folder, video_count, re_encode)
+        self.thread = VideoJoinerThread(self.video_manager, target_duration_sec, no_audio, out_folder, video_count)
         self.thread.log_signal.connect(self.log)
         self.thread.progress_signal.connect(self.progress_bar.setValue)
         self.thread.finished_signal.connect(self.on_finished)
